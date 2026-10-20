@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="A playable flute, synthesized live in your browser. Press and hold a key — the note sings while you hold it, like breath through a real flute." />
+    <link rel="icon" href="data:," />
+    <title>Flute</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f2f7fa;
+        --bg-soft: #e8f1f6;
+        --panel: #ffffff;
+        --ink: #22333f;
+        --ink-soft: #5b7182;
+        --line: #d3e0e8;
+        --steel: #7d99ab;
+        --steel-deep: #46697f;
+        --gold: #b98a2e;
+        --gold-soft: #f3e3ba;
+        --key-face: #fdfefe;
+        --key-edge: #b9ccd7;
+        --key-ink: #2b414f;
+        --sharp-face: #33505f;
+        --sharp-edge: #223a47;
+        --sharp-ink: #eef5f8;
+        --active-glow: rgba(201, 154, 46, 0.55);
+        --shadow: 0 10px 30px rgba(46, 80, 102, 0.12);
+        --flute-hi: #f4f8fa;
+        --flute-mid: #c3d3dd;
+        --flute-lo: #8fa9b8;
+        --flute-dark: #5d7a8c;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0e161d;
+          --bg-soft: #122029;
+          --panel: #16242f;
+          --ink: #e9f2f6;
+          --ink-soft: #9db4c1;
+          --line: #2a3f4d;
+          --steel: #6d8ea3;
+          --steel-deep: #a9c6d8;
+          --gold: #d9ab45;
+          --gold-soft: #4a3a16;
+          --key-face: #223644;
+          --key-edge: #3d5a6e;
+          --key-ink: #e6f0f5;
+          --sharp-face: #0c171f;
+          --sharp-edge: #2c4555;
+          --sharp-ink: #cfe2ec;
+          --active-glow: rgba(217, 171, 69, 0.5);
+          --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+          --flute-hi: #d7e5ec;
+          --flute-mid: #7e9cae;
+          --flute-lo: #48687c;
+          --flute-dark: #2e4a5b;
+        }
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: ui-rounded, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);
+        color: var(--ink);
+        min-height: 100vh;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .wrap {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 18px 18px 40px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .home-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel);
+        color: var(--steel-deep);
+        font-size: 15px;
+        font-weight: 600;
+        text-decoration: none;
+        box-shadow: 0 2px 8px rgba(46, 80, 102, 0.08);
+      }
+      .home-pill:hover { border-color: var(--steel); }
+      .now-note {
+        font-size: 15px;
+        color: var(--ink-soft);
+        min-height: 1.2em;
+        text-align: right;
+      }
+      .now-note strong { color: var(--gold); font-weight: 700; }
+
+      header { text-align: center; margin: 14px 0 4px; }
+      h1 {
+        font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+        font-weight: 600;
+        font-size: clamp(40px, 8vw, 58px);
+        letter-spacing: 0.04em;
+        margin: 0;
+        color: var(--ink);
+      }
+      .intro {
+        margin: 8px auto 0;
+        max-width: 34em;
+        font-size: clamp(16px, 2.6vw, 18.5px);
+        line-height: 1.55;
+        color: var(--ink-soft);
+      }
+
+      /* ---------- the drawn flute ---------- */
+      .flute-stage {
+        margin: 20px auto 6px;
+        max-width: 920px;
+        padding: 10px 6px 2px;
+      }
+      .flute-svg { display: block; width: 100%; height: auto; overflow: visible; }
+      .flute-svg .stop-hi  { stop-color: var(--flute-hi); }
+      .flute-svg .stop-mid { stop-color: var(--flute-mid); }
+      .flute-svg .stop-lo  { stop-color: var(--flute-lo); }
+      .flute-svg .cup {
+        fill: var(--flute-mid);
+        stroke: var(--flute-dark);
+        stroke-width: 1;
+      }
+      .flute-svg .cup-hi { fill: var(--flute-hi); }
+      .flute-svg.playing .tube {
+        filter: drop-shadow(0 0 7px var(--active-glow));
+      }
+      .flute-svg .tube { transition: filter 0.25s ease; }
+      @media (prefers-reduced-motion: reduce) {
+        .flute-svg .tube { transition: none; }
+      }
+
+      /* ---------- playable keys ---------- */
+      .keys {
+        display: grid;
+        grid-template-columns: repeat(9, 1fr);
+        gap: 10px;
+        margin: 18px auto 0;
+        max-width: 920px;
+      }
+      .key {
+        appearance: none;
+        border: 1px solid var(--key-edge);
+        background: radial-gradient(circle at 34% 30%, var(--key-face) 0%, var(--key-face) 55%, var(--bg-soft) 130%);
+        color: var(--key-ink);
+        border-radius: 50%;
+        aspect-ratio: 1 / 1;
+        width: 100%;
+        max-width: 88px;
+        max-height: 88px;
+        margin: 0 auto;
+        font: inherit;
+        font-size: clamp(14px, 2.4vw, 19px);
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        cursor: pointer;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        box-shadow: 0 3px 7px rgba(46, 80, 102, 0.16), inset 0 1px 2px rgba(255, 255, 255, 0.65);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.07s ease, box-shadow 0.12s ease, background 0.12s ease;
+      }
+      .key .sub {
+        display: block;
+        font-size: 0.58em;
+        font-weight: 600;
+        color: var(--ink-soft);
+        margin-top: 1px;
+      }
+      .key.sharp {
+        background: radial-gradient(circle at 34% 30%, var(--sharp-face) 0%, var(--sharp-face) 55%, var(--sharp-edge) 135%);
+        border-color: var(--sharp-edge);
+        color: var(--sharp-ink);
+        box-shadow: 0 3px 7px rgba(10, 25, 35, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.22);
+      }
+      .key.sharp .sub { color: var(--ink-soft); }
+      .key.active {
+        transform: scale(0.93);
+        border-color: var(--gold);
+        box-shadow: 0 0 0 3px var(--gold-soft), 0 0 18px var(--active-glow), inset 0 2px 6px rgba(120, 84, 10, 0.25);
+      }
+      .key:focus-visible {
+        outline: 3px solid var(--gold);
+        outline-offset: 3px;
+      }
+      @media (max-width: 560px) {
+        .keys { grid-template-columns: repeat(6, 1fr); gap: 9px; }
+        .key { max-width: 76px; max-height: 76px; }
+      }
+
+      /* ---------- controls ---------- */
+      .panel {
+        margin: 26px auto 0;
+        max-width: 920px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
+        padding: 20px 22px 18px;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 22px;
+        align-items: end;
+      }
+      @media (max-width: 640px) {
+        .controls { grid-template-columns: 1fr; gap: 16px; align-items: stretch; }
+      }
+      .slider-group label {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-weight: 700;
+        font-size: 16px;
+        margin-bottom: 2px;
+      }
+      .slider-group .ends {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12.5px;
+        color: var(--ink-soft);
+        margin-top: 2px;
+      }
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--steel-deep);
+        height: 34px;
+        cursor: pointer;
+        margin: 0;
+      }
+      .demo-btn {
+        appearance: none;
+        font: inherit;
+        font-weight: 700;
+        font-size: 16.5px;
+        color: #fff;
+        background: var(--steel-deep);
+        border: 1px solid var(--steel-deep);
+        border-radius: 999px;
+        padding: 13px 24px;
+        cursor: pointer;
+        white-space: nowrap;
+        box-shadow: 0 4px 12px rgba(46, 80, 102, 0.25);
+      }
+      @media (prefers-color-scheme: dark) {
+        .demo-btn { color: #0e161d; background: var(--steel); border-color: var(--steel); }
+      }
+      .demo-btn:hover { filter: brightness(1.07); }
+      .demo-btn.playing { background: var(--gold); border-color: var(--gold); color: #fff; }
+      .demo-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+
+      .hint {
+        text-align: center;
+        color: var(--ink-soft);
+        font-size: 14.5px;
+        line-height: 1.55;
+        margin: 18px auto 0;
+        max-width: 40em;
+      }
+      .fineprint {
+        text-align: center;
+        color: var(--ink-soft);
+        font-size: 13px;
+        margin: 10px auto 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="topbar">
+        <a class="home-pill" href="https://jesuslovestyler.com/">⌂ Home</a>
+        <div class="now-note" id="nowNote" aria-live="polite"></div>
+      </div>
+
+      <header>
+        <h1>Flute</h1>
+        <p class="intro">A flute only sings while the breath lasts. Press a key and hold it — let the note bloom, then lift your finger and let it rest.</p>
+      </header>
+
+      <div class="flute-stage" aria-hidden="true">
+        <svg class="flute-svg" id="fluteSvg" viewBox="0 0 920 96" role="img" aria-label="A silver flute">
+          <defs>
+            <linearGradient id="silver" x1="0" y1="0" x2="0" y2="1">
+              <stop class="stop-hi" offset="0" />
+              <stop class="stop-mid" offset="0.45" />
+              <stop class="stop-lo" offset="1" />
+            </linearGradient>
+            <linearGradient id="silverV" x1="0" y1="0" x2="1" y2="0">
+              <stop class="stop-lo" offset="0" />
+              <stop class="stop-hi" offset="0.5" />
+              <stop class="stop-lo" offset="1" />
+            </linearGradient>
+          </defs>
+          <!-- headjoint crown -->
+          <circle cx="34" cy="48" r="13" fill="url(#silverV)" stroke="var(--flute-dark)" stroke-width="1" />
+          <rect x="44" y="41" width="10" height="14" rx="3" fill="url(#silver)" stroke="var(--flute-dark)" stroke-width="0.75" />
+          <!-- main tube -->
+          <rect class="tube" x="52" y="40" width="816" height="16" rx="8" fill="url(#silver)" />
+          <!-- lip plate + embouchure hole -->
+          <rect x="118" y="52" width="52" height="7" rx="3.5" fill="url(#silver)" stroke="var(--flute-dark)" stroke-width="0.75" />
+          <ellipse cx="144" cy="46" rx="10" ry="5" fill="var(--flute-dark)" opacity="0.75" />
+          <!-- key cups along the body -->
+          <g>
+            <rect x="238" y="30" width="3.5" height="12" fill="var(--flute-dark)" />
+            <circle class="cup" cx="240" cy="27" r="10" />
+            <rect x="288" y="30" width="3.5" height="12" fill="var(--flute-dark)" />
+            <circle class="cup cup-hi" cx="290" cy="27" r="10" />
+            <rect x="338" y="30" width="3.5" height="12" fill="var(--flute-dark)" />
+            <circle class="cup" cx="340" cy="27" r="10" />
+            <rect x="402" y="62" width="3.5" height="12" fill="var(--flute-dark)" />
+            <circle class="cup cup-hi" cx="404" cy="77" r="10" />
+            <rect x="452" y="62" width="3.5" height="12" fill="var(--flute-dark)" />
+            <circle class="cup" cx="454" cy="77" r="10" />
+            <rect x="516" y="30" width="3.5" height="12" fill="var(--flute-dark)" />
+            <circle class="cup" cx="518" cy="27" r="10" />
+            <rect x="566" y="30" width="3.5" height="12" fill="var(--flute-dark)" />
+            <circle class="cup cup-hi" cx="568" cy="27" r="10" />
+            <rect x="630" y="62" width="3.5" height="12" fill="var(--flute-dark)" />
+            <circle class="cup" cx="632" cy="77" r="10" />
+            <rect x="694" y="30" width="3.5" height="12" fill="var(--flute-dark)" />
+            <circle class="cup cup-hi" cx="696" cy="27" r="10" />
+          </g>
+          <!-- rod -->
+          <rect x="230" y="20" width="480" height="3" rx="1.5" fill="var(--flute-dark)" opacity="0.55" />
+          <!-- foot joint -->
+          <rect x="742" y="43" width="4" height="10" fill="var(--flute-dark)" opacity="0.6" />
+          <circle class="cup" cx="788" cy="66" r="8" />
+          <rect x="786" y="54" width="3" height="6" fill="var(--flute-dark)" />
+          <rect x="856" y="40" width="12" height="16" rx="6" fill="url(#silver)" stroke="var(--flute-dark)" stroke-width="0.75" />
+        </svg>
+      </div>
+
+      <div class="keys" id="keys" role="group" aria-label="Flute keys, C5 to F6"></div>
+
+      <div class="panel">
+        <div class="controls">
+          <div class="slider-group">
+            <label for="breath">Breath</label>
+            <input type="range" id="breath" min="0" max="100" value="35" aria-label="Breath — how airy the tone is" />
+            <div class="ends"><span>pure &amp; mellow</span><span>airy &amp; bright</span></div>
+          </div>
+          <div class="slider-group">
+            <label for="volume">Volume</label>
+            <input type="range" id="volume" min="0" max="100" value="60" aria-label="Volume" />
+            <div class="ends"><span>soft</span><span>full</span></div>
+          </div>
+          <button class="demo-btn" id="demoBtn" type="button">▶ Play Ode to Joy</button>
+        </div>
+      </div>
+
+      <p class="hint">Hold a key to play. Slide your finger from key to key and the melody flows legato, the way a flute carries a tune on one breath. On a keyboard: A W S E D F T G Y H U J K O L P ; '</p>
+      <p class="fineprint">Every sound is synthesized live on your device with the Web Audio API — no audio files, nothing recorded, nothing sent anywhere.</p>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        /* ---------------- notes: C5 (MIDI 72) to F6 (MIDI 89) ---------------- */
+        var NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+        var NOTES = [];
+        for (var m = 72; m <= 89; m++) {
+          NOTES.push({
+            midi: m,
+            name: NAMES[m % 12] + (Math.floor(m / 12) - 1),
+            sharp: NAMES[m % 12].indexOf("♯") !== -1,
+            freq: 440 * Math.pow(2, (m - 69) / 12)
+          });
+        }
+        var byMidi = {};
+        NOTES.forEach(function (n) { byMidi[n.midi] = n; });
+
+        var keysEl = document.getElementById("keys");
+        var keyEls = {};
+        NOTES.forEach(function (n) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "key" + (n.sharp ? " sharp" : "");
+          b.dataset.midi = n.midi;
+          b.setAttribute("aria-label", "Play " + n.name.replace("♯", " sharp ") + " — press and hold");
+          b.innerHTML = "<span>" + n.name + "</span>";
+          keysEl.appendChild(b);
+          keyEls[n.midi] = b;
+        });
+
+        /* ---------------- audio engine ---------------- */
+        var ctx = null, master = null, noiseBuffer = null;
+        var voice = null;           /* the one sounding voice (a flute is monophonic) */
+        var currentMidi = null;
+
+        var breathInput = document.getElementById("breath");
+        var volumeInput = document.getElementById("volume");
+        var nowNote = document.getElementById("nowNote");
+        var fluteSvg = document.getElementById("fluteSvg");
+
+        function breathAmt() { return breathInput.value / 100; }
+        function noiseLevel() { return 0.004 + breathAmt() * 0.20; }
+        function brightness() { return 2100 + breathAmt() * 3900; }
+        function chiffAmt() { return 0.05 + breathAmt() * 0.30; }
+
+        function ensureCtx() {
+          if (ctx) {
+            if (ctx.state === "suspended") ctx.resume();
+            return;
+          }
+          var AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          ctx = new AC();
+          var comp = ctx.createDynamicsCompressor();
+          comp.threshold.value = -16;
+          comp.knee.value = 22;
+          comp.ratio.value = 8;
+          comp.attack.value = 0.004;
+          comp.release.value = 0.18;
+          comp.connect(ctx.destination);
+          master = ctx.createGain();
+          master.gain.value = masterLevel();
+          master.connect(comp);
+
+          noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+          var data = noiseBuffer.getChannelData(0);
+          for (var i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+        }
+
+        function masterLevel() {
+          return Math.pow(volumeInput.value / 100, 1.6) * 0.9;
+        }
+
+        volumeInput.addEventListener("input", function () {
+          if (ctx && master) master.gain.setTargetAtTime(masterLevel(), ctx.currentTime, 0.03);
+        });
+        breathInput.addEventListener("input", function () {
+          if (!ctx || !voice) return;
+          var t = ctx.currentTime;
+          voice.noiseGain.gain.setTargetAtTime(noiseLevel(), t, 0.05);
+          voice.filter.frequency.setTargetAtTime(brightness(), t, 0.05);
+        });
+
+        function chiff(freq, strength) {
+          /* the soft breathy "tuh" at the start of a note */
+          var t = ctx.currentTime;
+          var src = ctx.createBufferSource();
+          src.buffer = noiseBuffer;
+          src.playbackRate.value = 0.9 + Math.random() * 0.2;
+          var bp = ctx.createBiquadFilter();
+          bp.type = "bandpass";
+          bp.frequency.value = Math.min(4200, 1100 + freq * 1.1);
+          bp.Q.value = 0.9;
+          var g = ctx.createGain();
+          var peak = chiffAmt() * strength;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0011), t + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+          src.connect(bp); bp.connect(g); g.connect(voice.filter);
+          src.start(t, Math.random() * 1.2, 0.16);
+        }
+
+        function startVoice(freq) {
+          var t = ctx.currentTime;
+          var g = ctx.createGain();
+          g.gain.value = 0;
+          g.connect(master);
+
+          var filter = ctx.createBiquadFilter();
+          filter.type = "lowpass";
+          filter.frequency.value = brightness();
+          filter.Q.value = 0.4;
+          filter.connect(g);
+
+          var osc1 = ctx.createOscillator(); osc1.type = "sine";     osc1.frequency.value = freq;
+          var og1 = ctx.createGain(); og1.gain.value = 0.92;
+          var osc2 = ctx.createOscillator(); osc2.type = "triangle"; osc2.frequency.value = freq;
+          var og2 = ctx.createGain(); og2.gain.value = 0.16;
+          var osc3 = ctx.createOscillator(); osc3.type = "sine";     osc3.frequency.value = freq * 2;
+          var og3 = ctx.createGain(); og3.gain.value = 0.05;
+          osc1.connect(og1); og1.connect(filter);
+          osc2.connect(og2); og2.connect(filter);
+          osc3.connect(og3); og3.connect(filter);
+
+          /* breath noise, tuned near the note so it feels like air in the tube */
+          var nsrc = ctx.createBufferSource();
+          nsrc.buffer = noiseBuffer; nsrc.loop = true;
+          var nbp = ctx.createBiquadFilter();
+          nbp.type = "bandpass"; nbp.frequency.value = freq * 2; nbp.Q.value = 0.8;
+          var ng = ctx.createGain(); ng.gain.value = noiseLevel();
+          nsrc.connect(nbp); nbp.connect(ng); ng.connect(filter);
+
+          /* vibrato that blooms the longer the note is held */
+          var lfo = ctx.createOscillator(); lfo.type = "sine"; lfo.frequency.value = 5.3;
+          var lfoGain = ctx.createGain();
+          lfoGain.gain.setValueAtTime(0, t);
+          lfoGain.gain.linearRampToValueAtTime(0, t + 0.55);
+          lfoGain.gain.linearRampToValueAtTime(6.5, t + 1.7);
+          lfo.connect(lfoGain);
+          lfoGain.connect(osc1.detune); lfoGain.connect(osc2.detune); lfoGain.connect(osc3.detune);
+
+          /* gentle attack, like breath catching the edge */
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.85, t + 0.055);
+          g.gain.exponentialRampToValueAtTime(0.8, t + 0.22);
+
+          osc1.start(t); osc2.start(t); osc3.start(t); nsrc.start(t); lfo.start(t);
+
+          voice = {
+            gain: g, filter: filter, noiseGain: ng, noiseFilter: nbp,
+            oscs: [osc1, osc2, osc3], noise: nsrc, lfo: lfo, freq: freq
+          };
+          chiff(freq, 1);
+        }
+
+        function destroyVoice(v, when) {
+          var stopAt = when + 0.45;
+          v.oscs.forEach(function (o) { try { o.stop(stopAt); } catch (e) {} });
+          try { v.noise.stop(stopAt); } catch (e) {}
+          try { v.lfo.stop(stopAt); } catch (e) {}
+          var last = v.oscs[0];
+          last.onended = function () {
+            try { v.gain.disconnect(); } catch (e) {}
+          };
+        }
+
+        function releaseVoice() {
+          if (!voice) return;
+          var v = voice; voice = null;
+          var t = ctx.currentTime;
+          v.gain.gain.cancelScheduledValues(t);
+          v.gain.gain.setTargetAtTime(0.0001, t, 0.05);
+          v.noiseGain.gain.setTargetAtTime(0.0001, t, 0.04);
+          destroyVoice(v, t);
+        }
+
+        function glideTo(freq) {
+          /* legato: same breath, new fingering — just a whisper of glide */
+          var t = ctx.currentTime;
+          voice.oscs[0].frequency.setTargetAtTime(freq, t, 0.028);
+          voice.oscs[1].frequency.setTargetAtTime(freq, t, 0.028);
+          voice.oscs[2].frequency.setTargetAtTime(freq * 2, t, 0.028);
+          voice.noiseFilter.frequency.setTargetAtTime(freq * 2, t, 0.05);
+          voice.freq = freq;
+        }
+
+        function setActiveKey(midi) {
+          Object.keys(keyEls).forEach(function (k) {
+            keyEls[k].classList.toggle("active", Number(k) === midi);
+          });
+          fluteSvg.classList.toggle("playing", midi !== null);
+          if (midi !== null && byMidi[midi]) {
+            nowNote.innerHTML = "Now singing&nbsp; <strong>" + byMidi[midi].name + "</strong>";
+          } else {
+            nowNote.textContent = "";
+          }
+        }
+
+        function noteOn(midi, articulate) {
+          ensureCtx();
+          if (!ctx) return;
+          var n = byMidi[midi];
+          if (!n) return;
+          if (!voice) {
+            startVoice(n.freq);
+          } else if (voice.freq !== n.freq) {
+            glideTo(n.freq);
+            if (articulate) chiff(n.freq, 0.45);
+          } else if (articulate) {
+            chiff(n.freq, 0.7);
+          }
+          currentMidi = midi;
+          setActiveKey(midi);
+        }
+
+        function noteOff() {
+          if (!voice) { setActiveKey(null); currentMidi = null; return; }
+          releaseVoice();
+          currentMidi = null;
+          setActiveKey(null);
+        }
+
+        /* ---------------- pointer playing (hold + slide) ---------------- */
+        var activePointer = null;
+
+        function keyFromPoint(x, y) {
+          var el = document.elementFromPoint(x, y);
+          while (el && !(el.dataset && el.dataset.midi)) el = el.parentElement;
+          return el ? Number(el.dataset.midi) : null;
+        }
+
+        keysEl.addEventListener("pointerdown", function (e) {
+          e.preventDefault();
+          stopDemo();
+          if (activePointer !== null) return;
+          activePointer = e.pointerId;
+          var midi = keyFromPoint(e.clientX, e.clientY);
+          if (midi !== null) noteOn(midi, false);
+        });
+        window.addEventListener("pointermove", function (e) {
+          if (activePointer === null || e.pointerId !== activePointer) return;
+          var midi = keyFromPoint(e.clientX, e.clientY);
+          if (midi !== null && midi !== currentMidi) noteOn(midi, false);
+        });
+        function endPointer(e) {
+          if (activePointer === null || e.pointerId !== activePointer) return;
+          activePointer = null;
+          if (!demo.playing) noteOff();
+        }
+        window.addEventListener("pointerup", endPointer);
+        window.addEventListener("pointercancel", endPointer);
+        window.addEventListener("blur", function () {
+          activePointer = null;
+          if (!demo.playing) noteOff();
+        });
+
+        /* ---------------- computer keyboard ---------------- */
+        var KEYMAP = {
+          a: 72, w: 73, s: 74, e: 75, d: 76, f: 77, t: 78, g: 79,
+          y: 80, h: 81, u: 82, j: 83, k: 84, o: 85, l: 86, p: 87,
+          ";": 88, "'": 89
+        };
+        var heldKey = null;
+        window.addEventListener("keydown", function (e) {
+          if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+          var midi = KEYMAP[e.key.toLowerCase()];
+          if (midi === undefined) return;
+          stopDemo();
+          heldKey = e.key.toLowerCase();
+          noteOn(midi, false);
+        });
+        window.addEventListener("keyup", function (e) {
+          if (heldKey !== null && e.key.toLowerCase() === heldKey) {
+            heldKey = null;
+            if (!demo.playing) noteOff();
+          }
+        });
+
+        /* ---------------- Ode to Joy demo ---------------- */
+        var ODE = [
+          [76, 1], [76, 1], [77, 1], [79, 1],
+          [79, 1], [77, 1], [76, 1], [74, 1],
+          [72, 1], [72, 1], [74, 1], [76, 1],
+          [76, 1.5], [74, 0.5], [74, 2],
+          [76, 1], [76, 1], [77, 1], [79, 1],
+          [79, 1], [77, 1], [76, 1], [74, 1],
+          [72, 1], [72, 1], [74, 1], [76, 1],
+          [74, 1.5], [72, 0.5], [72, 2]
+        ];
+        var BEAT = 0.52, GAP = 0.05;
+        var demoBtn = document.getElementById("demoBtn");
+        var demo = { playing: false, timers: [] };
+
+        function stopDemo() {
+          if (!demo.playing) return;
+          demo.playing = false;
+          demo.timers.forEach(function (id) { clearTimeout(id); });
+          demo.timers = [];
+          demoBtn.textContent = "▶ Play Ode to Joy";
+          demoBtn.classList.remove("playing");
+          noteOff();
+        }
+
+        function playDemo() {
+          ensureCtx();
+          if (!ctx) return;
+          demo.playing = true;
+          demoBtn.textContent = "■ Stop Ode to Joy";
+          demoBtn.classList.add("playing");
+          var at = 0;
+          ODE.forEach(function (pair) {
+            var midi = pair[0], dur = pair[1] * BEAT;
+            (function (m, d, start) {
+              demo.timers.push(setTimeout(function () {
+                if (!demo.playing) return;
+                if (voice && currentMidi !== m) { releaseVoice(); startVoice(byMidi[m].freq); currentMidi = m; setActiveKey(m); }
+                else noteOn(m, true);
+              }, start * 1000));
+              demo.timers.push(setTimeout(function () {
+                if (!demo.playing) return;
+                if (currentMidi === m) noteOff();
+              }, (start + d - GAP) * 1000));
+            })(midi, dur, at);
+            at += dur;
+          });
+          demo.timers.push(setTimeout(stopDemo, (at + 0.15) * 1000));
+        }
+
+        demoBtn.addEventListener("click", function () {
+          if (demo.playing) stopDemo(); else playDemo();
+        });
+      })();
+    </script>
+    <script data-goatcounter="https://jesuslovestyler.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+  </body>
+</html>
